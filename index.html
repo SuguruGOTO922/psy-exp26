@@ -343,7 +343,7 @@ timeline.push({
       <p style="max-width:640px; margin: 12px auto;">
       障害物の<strong>上側</strong>を通る方がよいと判断したら <strong>上矢印キー（↑）</strong>を，<br>
       <strong>下側</strong>を通る方がよいと判断したら <strong>下矢印キー（↓）</strong>を押してください。</p>
-      <p>判断がついたら，できるだけ<strong>すみやかに</strong>回答してください。</p>
+      <p>判断がついたら，<strong>すみやかに</strong>回答してください。</p>
       <p style="max-width:640px; margin: 12px auto;">
       まず練習を ${CONFIG.PRACTICE_TRIALS} 試行行い，そのあと本番（${CONFIG.N_BLOCKS} ブロック）に進みます。<br>
       ブロックの間には休憩をとることができます。</p>
@@ -358,7 +358,7 @@ timeline.push({
       <p style="max-width:640px; margin: 12px auto;">
       障害物の<strong>上側</strong>を通る方がよいと判断したら <strong>↑ボタン</strong>を，<br>
       <strong>下側</strong>を通る方がよいと判断したら <strong>↓ボタン</strong>をタップしてください。</p>
-      <p>判断がついたら，できるだけ<strong>すみやかに</strong>回答してください。</p>
+      <p>判断がついたら，<strong>すみやかに</strong>回答してください。</p>
       <p style="max-width:640px; margin: 12px auto;">
       まず練習を ${CONFIG.PRACTICE_TRIALS} 試行行い，そのあと本番（${CONFIG.N_BLOCKS} ブロック）に進みます。<br>
       ブロックの間には休憩をとることができます。</p>
@@ -469,8 +469,7 @@ timeline.push({
   stimulus: () => `
     <h2>練習の開始</h2>
     <p>これから練習を ${CONFIG.PRACTICE_TRIALS} 試行行います。</p>
-    <p><strong>下のボタンを押すと，すぐに練習が始まります。</strong><br>
-    ボタンを押すと画面中央に「＋」が表示され，続いて課題画面が提示されます。</p>
+    <p><strong>下のボタンを押すと，すぐに練習が始まります。</strong></p>
     <p>${use_keyboard
       ? "矢印キー（↑／↓）に指を置いて，"
       : "画面の" + (button_position === "right" ? "右下" : "左下") + "のボタンに指を添えて，"}
@@ -491,7 +490,7 @@ timeline.push({
   type: jsPsychHtmlButtonResponse,
   stimulus: `<p>練習は以上です。ここからが本番です。</p>
              <p>やり方は練習と同じです。<br>
-             障害物の<strong>上側／下側</strong>のどちらを通る方が速く正確に
+             障害物の<strong>上側／下側</strong>のどちらを通る方が速く，かつ正確に
              到達できそうかを判断して回答してください。</p>
              <p><strong>下のボタンを押すと，すぐに本番が始まります。</strong><br>
              準備ができたらボタンを押してください。</p>`,
@@ -520,7 +519,7 @@ for (let b = 1; b <= CONFIG.N_BLOCKS; b++) {
       type: jsPsychHtmlButtonResponse,
       stimulus: `<h2>休憩</h2>
                  <p>ブロック ${b} / ${CONFIG.N_BLOCKS} が終了しました。</p>
-                 <p>必要なだけ休憩をとってください。<br>
+                 <p>休憩をとってください。<br>
                  <strong>下のボタンを押すと，すぐに次のブロックが始まります。</strong></p>`,
       choices: ["次のブロックを開始する"],
       data: { task: "rest" }

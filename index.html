@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>図形判断実験</title>
+  <title>到達運動判断課題</title>
 
   <!-- jsPsych 8 本体とプラグイン -->
   <script src="https://unpkg.com/jspsych@8.2.1"></script>
@@ -31,8 +31,7 @@
     .note { color: #666; font-size: 14px; }
 
     /* ---- タッチ回答用の矢印キー風ボタン ----
-       逆T字配置（上段：↑，下段：← ↓ →）。反応に使うのは↑↓のみ。
-       .arrow-trial が付与された試行でのみ画面隅に固定配置する */
+       逆T字配置（上段：↑，下段：← ↓ →）。反応に使うのは↑↓のみ。 */
     .arrow-trial #jspsych-html-button-response-btngroup {
       position: fixed;
       bottom: 32px;
@@ -56,8 +55,8 @@
       border: 3px solid #555;
       border-radius: 12px;
       background: #f5f5f5;
-      box-shadow: 0 4px 0 #bbb;          /* キーキャップ風の立体感 */
-      touch-action: manipulation;         /* ダブルタップズーム防止 */
+      box-shadow: 0 4px 0 #bbb;
+      touch-action: manipulation;
       -webkit-user-select: none;
       user-select: none;
       cursor: pointer;
@@ -67,13 +66,13 @@
       box-shadow: 0 1px 0 #bbb;
       transform: translateY(3px);
     }
-    /* 現在は反応に使わない装飾キー（←→） */
     .arrow-key-btn.decorative {
       opacity: 0.35;
       pointer-events: none;
     }
 
     .stim-area { font-size: 0; }
+    .scene-svg { width: min(900px, 92vw); height: auto; } /* 小さい画面では自動縮小 */
   </style>
 </head>
 <body></body>
@@ -85,45 +84,69 @@ const CONFIG = {
   // DataPipe（https://pipe.jspsych.org）の実験ID。空文字ならローカルCSV保存になる
   DATAPIPE_EXPERIMENT_ID: "",
 
-  N_BLOCKS: 3,             // 本試行のブロック数
-  REPEATS_PER_BLOCK: 5,    // 1ブロックあたり各刺激の繰り返し回数（→1ブロック10試行）
-  PRACTICE_REPEATS: 2,     // 練習での各刺激の繰り返し回数（→練習4試行）
+  N_BLOCKS: 6,             // 本試行（156試行）を分割するブロック数（156/6 = 26試行/ブロック）
+  PRACTICE_TRIALS: 10,     // 練習試行数（22点から重複を許してランダム選択）
 
   FIXATION_MIN: 400,       // 注視点提示時間の下限（ms）
   FIXATION_MAX: 900,       // 注視点提示時間の上限（ms）
-  FEEDBACK_DURATION: 800,  // 練習時のフィードバック提示時間（ms）
+  ISI: 500,                // 回答後，次試行開始までの刺激間間隔（ms）
+  BLOCK_START_BLANK: 1000, // 実験開始時・休憩後の再開時に挿入する空白画面（ms）
 
-  // ---- 刺激の提示サイズ・位置 ----
-  STIM_SIZE: 200,          // 刺激の一辺の長さ（px）
-  STIM_OFFSET_X: 0,        // 画面中央からの水平オフセット（px，正の値で右へ）
-  STIM_OFFSET_Y: 0         // 画面中央からの垂直オフセット（px，正の値で下へ）
+  /* ---- 刺激場面のジオメトリ ----
+     座標系：場面SVGの中心を原点(0,0)とし，x正=右，y正=上（水準の直感に合わせるため
+     内部でSVG座標に変換する）。単位はSVG座標（表示は下のDISPLAY_WIDTHで一括拡縮）。*/
+  SCENE: {
+    DISPLAY_WIDTH: 900,    // 画面上の表示幅（px）。CSSで min(900px, 92vw) に縮小対応
+    VIEW_W: 1000,          // SVG座標系の幅（±450の円が収まるよう余白込み）
+    VIEW_H: 560,           //          高さ（ダミー最上端の障害物±255が収まる高さ）
+
+    START_X: -450,         // スタート円の中心x（左側）
+    GOAL_X: 450,           // ゴール円の中心x（右側）
+    START_R: 22.5,         // スタート円の半径（最小）
+    GOAL_R: 37.5,          // ゴール円の半径（中）
+    OBSTACLE_R: 120,       // 障害物円の半径（最大）
+
+    OBSTACLE_X_NEAR: -120, // 障害物の水平位置：Near（スタート寄り）
+    OBSTACLE_X_FAR: 120,   //                   Far（ゴール寄り）
+
+    STEP_Y: 27,            // 高さ1水準あたりの垂直間隔
+    MAIN_LEVELS: [-3, -2, -1, 0, 1, 2, 3],  // 本試行の高さ7水準（正=上，負=下）
+    DUMMY_LEVELS: [-5, -4, 4, 5],           // ダミー試行の高さ4水準
+    MAIN_REPS: 10,         // 本試行：各点の繰り返し（2×7×10 = 140）
+    DUMMY_REPS: 2,         // ダミー：各点の繰り返し（2×4×2 = 16）
+
+    COLOR_START: "#8a8a8a",     // グレー
+    COLOR_GOAL: "#5ec8f2",      // スカイブルー
+    COLOR_OBSTACLE: "#e03131"   // レッド
+  }
 };
 
-// 刺激の定義：correct は "up"（↑が正答）か "down"（↓が正答）
-// 描画関数は一辺 size px のSVGを返す（viewBox基準なのでサイズ変更に自動追従）
-const STIMULI = [
-  { shape: "circle", correct: "up" },
-  { shape: "square", correct: "down" }
-];
-
-function makeStimulusSVG(shape, size) {
-  const shapes = {
-    circle: '<circle cx="100" cy="100" r="80" fill="#333"/>',
-    square: '<rect x="20" y="20" width="160" height="160" fill="#333"/>'
-  };
-  return `<svg width="${size}" height="${size}" viewBox="0 0 200 200" ` +
-         `xmlns="http://www.w3.org/2000/svg">${shapes[shape]}</svg>`;
-}
-
-// 刺激をオフセット付きで包むラッパー
-function stimulusHTML(shape) {
-  return `<div class="stim-area" style="transform: translate(${CONFIG.STIM_OFFSET_X}px, ${CONFIG.STIM_OFFSET_Y}px);">` +
-         makeStimulusSVG(shape, CONFIG.STIM_SIZE) + `</div>`;
-}
-
-// 反応の割り当て（キーボード条件）
+// 反応の割り当て（キーボード条件）：↑=障害物の上側を回避，↓=下側を回避
 const KEY_UP = "ArrowUp";
 const KEY_DOWN = "ArrowDown";
+
+/* =========================================================
+   刺激場面の描画
+========================================================= */
+// 障害物の中心座標（x, y。yは正=上）を受け取り，場面全体のSVGを返す
+function sceneSVG(obs_x, obs_y, display_width) {
+  const S = CONFIG.SCENE;
+  const w = display_width || S.DISPLAY_WIDTH;
+  // 内部座標系：中心原点。SVGはy正=下なので符号を反転する
+  const toSvgY = (y) => -y;
+  return `
+  <svg class="scene-svg" style="width:min(${w}px, 92vw);"
+       viewBox="${-S.VIEW_W / 2} ${-S.VIEW_H / 2} ${S.VIEW_W} ${S.VIEW_H}"
+       xmlns="http://www.w3.org/2000/svg">
+    <circle cx="${S.START_X}" cy="0" r="${S.START_R}" fill="${S.COLOR_START}"/>
+    <circle cx="${S.GOAL_X}"  cy="0" r="${S.GOAL_R}"  fill="${S.COLOR_GOAL}"/>
+    <circle cx="${obs_x}" cy="${toSvgY(obs_y)}" r="${S.OBSTACLE_R}" fill="${S.COLOR_OBSTACLE}"/>
+  </svg>`;
+}
+
+function stimulusHTML(obs_x, obs_y) {
+  return `<div class="stim-area">${sceneSVG(obs_x, obs_y)}</div>`;
+}
 
 /* =========================================================
    初期化
@@ -136,10 +159,7 @@ const jsPsych = initJsPsych({
   }
 });
 
-/* --- 表示環境メタデータの記録（全行に付与される） ---
-   screen_*   : ディスプレイ全体の解像度（CSSピクセル）
-   viewport_* : 実験開始時のブラウザ表示領域
-   device_pixel_ratio : 物理ピクセル/CSSピクセル比（Retina等で>1）      */
+/* --- 表示環境メタデータの記録（全行に付与される） --- */
 jsPsych.data.addProperties({
   screen_width: screen.width,
   screen_height: screen.height,
@@ -156,8 +176,55 @@ let participant_id =
 // 入力方法（自動判定。フォームで参加者が変更可能）
 let use_keyboard = !(("ontouchstart" in window) || navigator.maxTouchPoints > 0);
 
-// タッチUIの配置。利き手の回答に基づき決定（右利き→右下，左利き→左下）
+// タッチUIの配置（右利き→右下，左利き→左下）
 let button_position = "right";
+
+/* =========================================================
+   試行リストの生成
+========================================================= */
+function obstacleX(distance) {
+  return distance === "near" ? CONFIG.SCENE.OBSTACLE_X_NEAR : CONFIG.SCENE.OBSTACLE_X_FAR;
+}
+
+function makeConditionObject(distance, level, kind) {
+  return {
+    distance: distance,                       // "near" / "far"
+    height_level: level,                      // 整数（正=上，負=下）
+    obs_x: obstacleX(distance),
+    obs_y: level * CONFIG.SCENE.STEP_Y,       // 内部座標（正=上）
+    trial_kind: kind                          // "main" / "dummy"
+  };
+}
+
+// 本試行140 + ダミー16 = 156試行をまとめてシャッフル（ダミーがランダムに混入される）
+function makeMainTrialList() {
+  const list = [];
+  for (const dist of ["near", "far"]) {
+    for (const lv of CONFIG.SCENE.MAIN_LEVELS) {
+      for (let i = 0; i < CONFIG.SCENE.MAIN_REPS; i++) {
+        list.push(makeConditionObject(dist, lv, "main"));
+      }
+    }
+    for (const lv of CONFIG.SCENE.DUMMY_LEVELS) {
+      for (let i = 0; i < CONFIG.SCENE.DUMMY_REPS; i++) {
+        list.push(makeConditionObject(dist, lv, "dummy"));
+      }
+    }
+  }
+  return jsPsych.randomization.shuffle(list);
+}
+
+// 練習：全22点（2距離 × 11水準）から重複を許して PRACTICE_TRIALS 回ランダム抽出
+function makePracticeTrialList() {
+  const all22 = [];
+  const allLevels = [...CONFIG.SCENE.MAIN_LEVELS, ...CONFIG.SCENE.DUMMY_LEVELS];
+  for (const dist of ["near", "far"]) {
+    for (const lv of allLevels) {
+      all22.push(makeConditionObject(dist, lv, "practice"));
+    }
+  }
+  return jsPsych.randomization.sampleWithReplacement(all22, CONFIG.PRACTICE_TRIALS);
+}
 
 /* =========================================================
    タイムライン構築
@@ -195,6 +262,7 @@ timeline.push({
       <legend>利き手</legend>
       <label><input type="radio" name="handedness" value="right" required> 右利き</label>
       <label><input type="radio" name="handedness" value="left"> 左利き</label>
+      <label><input type="radio" name="handedness" value="both"> 両利き</label>
     </fieldset>
 
     <fieldset>
@@ -234,7 +302,6 @@ timeline.push({
   button_label: "全画面にして説明へ進む",
   delay_after: 300,
   on_finish: () => {
-    // 全画面化後の実際の提示領域を記録（刺激サイズの事後推定に使用）
     jsPsych.data.addProperties({
       viewport_width_fullscreen: window.innerWidth,
       viewport_height_fullscreen: window.innerHeight
@@ -246,32 +313,58 @@ timeline.push({
 timeline.push({
   type: jsPsychInstructions,
   pages: () => {
-    const common1 = `
-      <h2>実験の説明</h2>
-      <p>この実験では，画面に図形（円または四角）が1つずつ表示されます。</p>
-      <p>各図形の前には「＋」マーク（注視点）が表示されます。<br>
-      「＋」が出ている間は画面中央を見つめていてください。</p>`;
+    // 教示用の例示場面（Near位置・やや上の障害物）
+    const example = sceneSVG(CONFIG.SCENE.OBSTACLE_X_NEAR, 2 * CONFIG.SCENE.STEP_Y, 520);
+
+    const page1 = `
+      <h2>課題の説明（1/3）</h2>
+      <p>この実験では，下の図のような画面が表示されます。</p>
+      ${example}
+      <p style="max-width:640px; margin: 12px auto;">
+      左の<strong style="color:${CONFIG.SCENE.COLOR_START};">灰色の円</strong>が<strong>スタート地点</strong>，
+      右の<strong style="color:${CONFIG.SCENE.COLOR_GOAL};">水色の円</strong>が<strong>ゴール地点</strong>，
+      中央付近の<strong style="color:${CONFIG.SCENE.COLOR_OBSTACLE};">赤色の円</strong>が<strong>障害物</strong>です。<br>
+      障害物の位置は試行ごとに変わります。</p>`;
+
+    const page2 = `
+      <h2>課題の説明（2/3）</h2>
+      <p style="max-width:640px; margin: 12px auto;">
+      スタートからゴールまで，<strong>自分の腕（上肢）を動かして，手をゴールまで
+      到達させる場面を想像してください</strong>。<br>
+      （実際に腕を動かす必要はありません）</p>
+      <p style="max-width:640px; margin: 12px auto;">
+      その運動を行うとしたら，赤い障害物の<strong>上側</strong>と<strong>下側</strong>の
+      どちらを通って回避する方が，<strong>できるだけ速く・正確に</strong>ゴールに
+      到達できそうかを判断してください。</p>
+      <p class="note">この課題に決まった正解はありません。あなた自身の判断で回答してください。</p>`;
+
     const mapping_kb = `
-      <h2>回答方法</h2>
-      <p>図形が<strong>円</strong>のときは <strong>上矢印キー（↑）</strong>を，<br>
-      図形が<strong>四角</strong>のときは <strong>下矢印キー（↓）</strong>を押してください。</p>
-      <p>できるだけ<strong>速く，正確に</strong>回答してください。</p>`;
-    const mapping_btn = `
-      <h2>回答方法</h2>
-      <p>画面の${button_position === "right" ? "右下" : "左下"}に，
-      矢印キーの形をしたボタンが表示されます。</p>
-      <p>回答に使うのは<strong>上向き（↑）と下向き（↓）のボタンのみ</strong>です。<br>
-      左右のボタンはこの実験では使用しません。</p>
-      <p>図形が<strong>円</strong>のときは <strong>↑ボタン</strong>を，<br>
-      図形が<strong>四角</strong>のときは <strong>↓ボタン</strong>をタップしてください。</p>
-      <p>できるだけ<strong>速く，正確に</strong>回答してください。</p>`;
-    const common2 = `
-      <h2>練習について</h2>
-      <p>まず<strong>練習試行</strong>を行います。練習では回答のたびに正誤が表示されます。</p>
-      <p>練習のあと，本番の試行が ${CONFIG.N_BLOCKS} ブロックあります。<br>
+      <h2>回答方法（3/3）</h2>
+      <p style="max-width:640px; margin: 12px auto;">
+      障害物の<strong>上側</strong>を通る方がよいと判断したら <strong>上矢印キー（↑）</strong>を，<br>
+      <strong>下側</strong>を通る方がよいと判断したら <strong>下矢印キー（↓）</strong>を押してください。</p>
+      <p>判断がついたら，できるだけ<strong>すみやかに</strong>回答してください。</p>
+      <p style="max-width:640px; margin: 12px auto;">
+      まず練習を ${CONFIG.PRACTICE_TRIALS} 試行行い，そのあと本番（${CONFIG.N_BLOCKS} ブロック）に進みます。<br>
       ブロックの間には休憩をとることができます。</p>
-      <p>準備ができたら「次へ」を押して練習を始めてください。</p>`;
-    return [common1, use_keyboard ? mapping_kb : mapping_btn, common2];
+      <p class="note">「次へ」を押すと，練習開始前の確認画面に進みます（まだ練習は始まりません）。</p>`;
+
+    const mapping_btn = `
+      <h2>回答方法（3/3）</h2>
+      <p style="max-width:640px; margin: 12px auto;">
+      画面の${button_position === "right" ? "右下" : "左下"}に，矢印キーの形をした
+      ボタンが表示されます。回答に使うのは<strong>↑と↓のみ</strong>です
+      （左右のボタンは使用しません）。</p>
+      <p style="max-width:640px; margin: 12px auto;">
+      障害物の<strong>上側</strong>を通る方がよいと判断したら <strong>↑ボタン</strong>を，<br>
+      <strong>下側</strong>を通る方がよいと判断したら <strong>↓ボタン</strong>をタップしてください。</p>
+      <p>判断がついたら，できるだけ<strong>すみやかに</strong>回答してください。</p>
+      <p style="max-width:640px; margin: 12px auto;">
+      まず練習を ${CONFIG.PRACTICE_TRIALS} 試行行い，そのあと本番（${CONFIG.N_BLOCKS} ブロック）に進みます。<br>
+      ブロックの間には休憩をとることができます。</p>
+      <p class="note">「次へ」を押すと，練習開始前の確認画面に進みます（まだ練習は始まりません）。</p>`;
+
+    return [page1, page2, use_keyboard ? mapping_kb : mapping_btn];
   },
   show_clickable_nav: true,
   button_label_previous: "戻る",
@@ -290,26 +383,35 @@ const fixation = {
   data: { task: "fixation" }
 };
 
-// キーボード条件の反応試行（↑／↓）
+// 試行に付与する共通データ列
+const trial_data = {
+  task: "response",
+  distance: jsPsych.timelineVariable("distance"),
+  height_level: jsPsych.timelineVariable("height_level"),
+  obstacle_x: jsPsych.timelineVariable("obs_x"),
+  obstacle_y: jsPsych.timelineVariable("obs_y"),
+  trial_kind: jsPsych.timelineVariable("trial_kind")
+};
+
+// キーボード条件（↑=上側回避，↓=下側回避）
 const trial_keyboard = {
   type: jsPsychHtmlKeyboardResponse,
-  stimulus: () => stimulusHTML(jsPsych.evaluateTimelineVariable("shape")),
+  stimulus: () => stimulusHTML(
+    jsPsych.evaluateTimelineVariable("obs_x"),
+    jsPsych.evaluateTimelineVariable("obs_y")),
   choices: [KEY_UP, KEY_DOWN],
-  data: {
-    task: "response",
-    shape: jsPsych.timelineVariable("shape"),
-    correct_response: jsPsych.timelineVariable("correct")
-  },
+  data: trial_data,
   on_finish: (data) => {
     data.chosen = jsPsych.pluginAPI.compareKeys(data.response, KEY_UP) ? "up" : "down";
-    data.correct = (data.chosen === data.correct_response);
   }
 };
 
-// タッチ条件の反応試行（矢印キーパッドを利き手側の画面隅に配置）
+// タッチ条件（矢印キーパッドを利き手側の画面隅に配置）
 const trial_button = {
   type: jsPsychHtmlButtonResponse,
-  stimulus: () => stimulusHTML(jsPsych.evaluateTimelineVariable("shape")),
+  stimulus: () => stimulusHTML(
+    jsPsych.evaluateTimelineVariable("obs_x"),
+    jsPsych.evaluateTimelineVariable("obs_y")),
   choices: ["up", "down"],
   button_html: (choice, i) =>
     i === 0
@@ -317,7 +419,6 @@ const trial_button = {
       : '<button class="arrow-key-btn key-down">↓</button>',
   css_classes: () => ["arrow-trial", "pos-" + button_position],
   on_load: () => {
-    // 装飾用の←→キーを追加（現在は反応に使用しないため無効化してある）
     const grp = document.getElementById("jspsych-html-button-response-btngroup");
     const mkDeco = (symbol, cls) => {
       const b = document.createElement("button");
@@ -330,43 +431,58 @@ const trial_button = {
     grp.appendChild(mkDeco("←", "key-left"));
     grp.appendChild(mkDeco("→", "key-right"));
   },
-  data: {
-    task: "response",
-    shape: jsPsych.timelineVariable("shape"),
-    correct_response: jsPsych.timelineVariable("correct")
-  },
+  data: trial_data,
   on_finish: (data) => {
     data.chosen = (data.response === 0) ? "up" : "down";
-    data.correct = (data.chosen === data.correct_response);
   }
+};
+
+// 刺激間間隔（ISI）：回答後，次試行の注視点が出るまでの空白画面
+const isi = {
+  type: jsPsychHtmlKeyboardResponse,
+  stimulus: "",
+  choices: "NO_KEYS",
+  trial_duration: () => CONFIG.ISI,
+  data: { task: "isi" }
+};
+
+// ブロック開始時の空白画面（練習開始時・本番開始時・休憩後の再開時に挿入）
+const block_start_blank = {
+  type: jsPsychHtmlKeyboardResponse,
+  stimulus: "",
+  choices: "NO_KEYS",
+  trial_duration: () => CONFIG.BLOCK_START_BLANK,
+  data: { task: "block_start_blank" }
 };
 
 // 入力方法に応じてどちらかを実行する共通ユニット
 const response_unit = [
   fixation,
   { timeline: [trial_keyboard], conditional_function: () => use_keyboard },
-  { timeline: [trial_button],  conditional_function: () => !use_keyboard }
+  { timeline: [trial_button],  conditional_function: () => !use_keyboard },
+  isi
 ];
 
-// 練習用フィードバック（直前の反応試行の正誤を表示）
-const feedback = {
-  type: jsPsychHtmlKeyboardResponse,
-  choices: "NO_KEYS",
-  trial_duration: CONFIG.FEEDBACK_DURATION,
-  stimulus: () => {
-    const last = jsPsych.data.get().filter({ task: "response" }).last(1).values()[0];
-    return last.correct
-      ? '<p style="font-size:36px; color:#2a7a2a;">正解</p>'
-      : '<p style="font-size:36px; color:#b03030;">不正解</p>';
-  },
-  data: { task: "feedback" }
-};
-
-/* --- 練習ブロック --- */
+/* --- 練習開始の確認画面 --- */
 timeline.push({
-  timeline: [...response_unit, feedback],
-  timeline_variables: STIMULI,
-  sample: { type: "fixed-repetitions", size: CONFIG.PRACTICE_REPEATS },
+  type: jsPsychHtmlButtonResponse,
+  stimulus: () => `
+    <h2>練習の開始</h2>
+    <p>これから練習を ${CONFIG.PRACTICE_TRIALS} 試行行います。</p>
+    <p><strong>下のボタンを押すと，すぐに練習が始まります。</strong><br>
+    ボタンを押すと画面中央に「＋」が表示され，続いて課題画面が提示されます。</p>
+    <p>${use_keyboard
+      ? "矢印キー（↑／↓）に指を置いて，"
+      : "画面の" + (button_position === "right" ? "右下" : "左下") + "のボタンに指を添えて，"}
+    準備ができたらボタンを押してください。</p>`,
+  choices: ["練習を開始する"]
+});
+
+/* --- 練習ブロック（22点から重複ありランダム抽出・フィードバックなし） --- */
+timeline.push(block_start_blank);
+timeline.push({
+  timeline: response_unit,
+  timeline_variables: makePracticeTrialList(),
   data: { phase: "practice" }
 });
 
@@ -374,17 +490,28 @@ timeline.push({
 timeline.push({
   type: jsPsychHtmlButtonResponse,
   stimulus: `<p>練習は以上です。ここからが本番です。</p>
-             <p>本番では正誤のフィードバックは表示されません。</p>
-             <p>準備ができたらボタンを押して開始してください。</p>`,
+             <p>やり方は練習と同じです。<br>
+             障害物の<strong>上側／下側</strong>のどちらを通る方が速く正確に
+             到達できそうかを判断して回答してください。</p>
+             <p><strong>下のボタンを押すと，すぐに本番が始まります。</strong><br>
+             準備ができたらボタンを押してください。</p>`,
   choices: ["本番を開始する"]
 });
 
-/* --- 本試行：ブロック分け＋ブロック間の休憩 --- */
+/* --- 本試行：156試行（本試行140＋ダミー16をシャッフル）をブロックに分割 --- */
+const all_trials = makeMainTrialList();
+const per_block = Math.ceil(all_trials.length / CONFIG.N_BLOCKS);
+
 for (let b = 1; b <= CONFIG.N_BLOCKS; b++) {
+  const chunk = all_trials.slice((b - 1) * per_block, b * per_block);
+  if (chunk.length === 0) break;
+
+  // ブロック開始時（本番開始直後・休憩後の再開直後）の空白画面
+  timeline.push(block_start_blank);
+
   timeline.push({
     timeline: response_unit,
-    timeline_variables: STIMULI,
-    sample: { type: "fixed-repetitions", size: CONFIG.REPEATS_PER_BLOCK },
+    timeline_variables: chunk,
     data: { phase: "main", block: b }
   });
 
@@ -393,8 +520,8 @@ for (let b = 1; b <= CONFIG.N_BLOCKS; b++) {
       type: jsPsychHtmlButtonResponse,
       stimulus: `<h2>休憩</h2>
                  <p>ブロック ${b} / ${CONFIG.N_BLOCKS} が終了しました。</p>
-                 <p>必要なだけ休憩をとり，準備ができたらボタンを押して<br>
-                 次のブロックを開始してください。</p>`,
+                 <p>必要なだけ休憩をとってください。<br>
+                 <strong>下のボタンを押すと，すぐに次のブロックが始まります。</strong></p>`,
       choices: ["次のブロックを開始する"],
       data: { task: "rest" }
     });

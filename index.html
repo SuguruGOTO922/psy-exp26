@@ -73,6 +73,22 @@
 
     .stim-area { font-size: 0; }
     .scene-svg { width: min(900px, 92vw); height: auto; } /* 小さい画面では自動縮小 */
+
+    /* ---- 実験中（全画面化後）のダークモード ----
+       全画面化のタイミングで <html> に .dark-mode を付与して有効化する。
+       デモグラフィック入力画面はこのクラスが付く前なので影響を受けない。 */
+    html.dark-mode, html.dark-mode body {
+      background-color: #000;
+      color: #fff;
+    }
+    html.dark-mode .note { color: #aaa; }   /* 補足テキストは薄いグレーに */
+    html.dark-mode .arrow-key-btn {
+      background: #2b2b2b;
+      color: #fff;
+      border-color: #999;
+      box-shadow: 0 4px 0 #555;
+    }
+    html.dark-mode .arrow-key-btn:active { box-shadow: 0 1px 0 #555; }
   </style>
 </head>
 <body></body>
@@ -302,6 +318,8 @@ timeline.push({
   button_label: "全画面にして説明へ進む",
   delay_after: 300,
   on_finish: () => {
+    // ここから実験終了まで黒背景・白文字に切り替える
+    document.documentElement.classList.add("dark-mode");
     jsPsych.data.addProperties({
       viewport_width_fullscreen: window.innerWidth,
       viewport_height_fullscreen: window.innerHeight
@@ -322,7 +340,7 @@ timeline.push({
       ${example}
       <p style="max-width:640px; margin: 12px auto;">
       左の<strong style="color:${CONFIG.SCENE.COLOR_START};">灰色の円</strong>が<strong>スタート地点</strong>，
-      右の<strong style="color:${CONFIG.SCENE.COLOR_GOAL};">水色の円</strong>が<strong>ゴール地点</strong>，
+      右の<strong style="color:${CONFIG.SCENE.COLOR_GOAL};">水色の円</strong>が<strong>ゴール地点</strong>，<br>
       中央付近の<strong style="color:${CONFIG.SCENE.COLOR_OBSTACLE};">赤色の円</strong>が<strong>障害物</strong>です。<br>
       障害物の位置は試行ごとに変わります。</p>`;
 
@@ -336,7 +354,7 @@ timeline.push({
       その運動を行うとしたら，赤い障害物の<strong>上側</strong>と<strong>下側</strong>の
       どちらを通って回避する方が，<strong>できるだけ速く・正確に</strong>ゴールに
       到達できそうかを判断してください。</p>
-      <p class="note">この課題に決まった正解はありません。あなた自身の判断で回答してください。</p>`;
+      <p>この課題に決まった正解はありません。あなた自身の判断で回答してください。</p>`;
 
     const mapping_kb = `
       <h2>回答方法（3/3）</h2>
@@ -469,7 +487,8 @@ timeline.push({
   stimulus: () => `
     <h2>練習の開始</h2>
     <p>これから練習を ${CONFIG.PRACTICE_TRIALS} 試行行います。</p>
-    <p><strong>下のボタンを押すと，すぐに練習が始まります。</strong></p>
+    <p><strong>下のボタンを押すと，すぐに練習が始まります。</strong><br>
+    ボタンを押すと画面中央に「＋」が表示され，続いて課題画面が提示されます。</p>
     <p>${use_keyboard
       ? "矢印キー（↑／↓）に指を置いて，"
       : "画面の" + (button_position === "right" ? "右下" : "左下") + "のボタンに指を添えて，"}
@@ -490,7 +509,7 @@ timeline.push({
   type: jsPsychHtmlButtonResponse,
   stimulus: `<p>練習は以上です。ここからが本番です。</p>
              <p>やり方は練習と同じです。<br>
-             障害物の<strong>上側／下側</strong>のどちらを通る方が速く，かつ正確に
+             障害物の<strong>上側／下側</strong>のどちらを通る方が速くかつ正確に
              到達できそうかを判断して回答してください。</p>
              <p><strong>下のボタンを押すと，すぐに本番が始まります。</strong><br>
              準備ができたらボタンを押してください。</p>`,
@@ -541,7 +560,11 @@ if (CONFIG.DATAPIPE_EXPERIMENT_ID) {
 /* --- フルスクリーン解除 --- */
 timeline.push({
   type: jsPsychFullscreen,
-  fullscreen_mode: false
+  fullscreen_mode: false,
+  on_finish: () => {
+    // 実験パートの終了に合わせて通常の配色に戻す
+    document.documentElement.classList.remove("dark-mode");
+  }
 });
 
 /* --- 終了画面 --- */

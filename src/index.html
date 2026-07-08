@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>図形判断実験</title>
+
+  <!-- jsPsych 8 本体とプラグイン -->
+  <script src="https://unpkg.com/jspsych@8.2.1"></script>
+  <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@2.1.0"></script>
+  <script src="https://unpkg.com/@jspsych/plugin-html-button-response@2.1.0"></script>
+  <script src="https://unpkg.com/@jspsych/plugin-survey-html-form@2.1.0"></script>
+  <script src="https://unpkg.com/@jspsych/plugin-instructions@2.1.0"></script>
+  <script src="https://unpkg.com/@jspsych/plugin-fullscreen@2.1.0"></script>
+  <script src="https://unpkg.com/@jspsych-contrib/plugin-pipe@0.6"></script>
+  <link href="https://unpkg.com/jspsych@8.2.1/css/jspsych.css" rel="stylesheet">
+
+  <style>
+    /* ---- 初期フォーム（参加者ID・デモグラフィック） ---- */
+    #entry-form { max-width: 480px; margin: 0 auto; text-align: left; }
+    #entry-form fieldset {
+      border: 1px solid #ccc; border-radius: 8px;
+      margin-bottom: 16px; padding: 12px 16px;
+    }
+    #entry-form legend { font-weight: bold; padding: 0 8px; }
+    #entry-form input[type="text"], #entry-form input[type="number"] {
+      font-size: 18px; padding: 6px 10px;
+      border: 1px solid #999; border-radius: 6px;
+    }
+    #entry-form label { margin-right: 14px; font-size: 17px; }
+    .note { color: #666; font-size: 14px; }
+
+    /* ---- タッチ回答用の矢印キー風ボタン ----
+       逆T字配置（上段：↑，下段：← ↓ →）。反応に使うのは↑↓のみ。
+       .arrow-trial が付与された試行でのみ画面隅に固定配置する */
+    .arrow-trial #jspsych-html-button-response-btngroup {
+      position: fixed;
+      bottom: 32px;
+      display: grid;
+      grid-template-columns: repeat(3, 84px);
+      grid-template-rows: repeat(2, 84px);
+      gap: 10px;
+    }
+    .arrow-trial.pos-right #jspsych-html-button-response-btngroup { right: 32px; }
+    .arrow-trial.pos-left  #jspsych-html-button-response-btngroup { left: 32px; }
+
+    .key-up    { grid-column: 2; grid-row: 1; }
+    .key-left  { grid-column: 1; grid-row: 2; }
+    .key-down  { grid-column: 2; grid-row: 2; }
+    .key-right { grid-column: 3; grid-row: 2; }
+
+    .arrow-key-btn {
+      width: 84px;
+      height: 84px;
+      font-size: 36px;
+      border: 3px solid #555;
+      border-radius: 12px;
+      background: #f5f5f5;
+      box-shadow: 0 4px 0 #bbb;          /* キーキャップ風の立体感 */
+      touch-action: manipulation;         /* ダブルタップズーム防止 */
+      -webkit-user-select: none;
+      user-select: none;
+      cursor: pointer;
+      padding: 0;
+    }
+    .arrow-key-btn:active {
+      box-shadow: 0 1px 0 #bbb;
+      transform: translateY(3px);
+    }
+    /* 現在は反応に使わない装飾キー（←→） */
+    .arrow-key-btn.decorative {
+      opacity: 0.35;
+      pointer-events: none;
+    }
+
+    .stim-area { font-size: 0; }
+  </style>
+</head>
+<body></body>
+<script>
+/* =========================================================
+   設定（実験デザインに合わせてここだけ編集すればよい）
+========================================================= */
+const CONFIG = {
+  // DataPipe（https://pipe.jspsych.org）の実験ID。空文字ならローカルCSV保存になる
+  DATAPIPE_EXPERIMENT_ID: "",
+
+  N_BLOCKS: 3,             // 本試行のブロック数
+  REPEATS_PER_BLOCK: 5,    // 1ブロックあたり各刺激の繰り返し回数（→1ブロック10試行）
+  PRACTICE_REPEATS: 2,     // 練習での各刺激の繰り返し回数（→練習4試行）
+
+  FIXATION_MIN: 400,       // 注視点提示時間の下限（ms）
+  FIXATION_MAX: 900,       // 注視点提示時間の上限（ms）
+  FEEDBACK_DURATION: 800,  // 練習時のフィードバック提示時間（ms）
+
+  // ---- 刺激の提示サイズ・位置 ----
+  STIM_SIZE: 200,          // 刺激の一辺の長さ（px）
+  STIM_OFFSET_X: 0,        // 画面中央からの水平オフセット（px，正の値で右へ）
+  STIM_OFFSET_Y: 0         // 画面中央からの垂直オフセット（px，正の値で下へ）
+};
+
+// 刺激の定義：correct は "up"（↑が正答）か "down"（↓が正答）
+// 描画関数は一辺 size px のSVGを返す（viewBox基準なのでサイズ変更に自動追従）
+const STIMULI = [
+  { shape: "circle", correct: "up" },
+  { shape: "square", correct: "down" }
+];
+
+function makeStimulusSVG(shape, size) {
+  const shapes = {
+    circle: '<circle cx="100" cy="100" r="80" fill="#333"/>',
+    square: '<rect x="20" y="20" width="160" height="160" fill="#333"/>'
+  };
+  return `<svg width="${size}" height="${size}" viewBox="0 0 200 200" ` +
+         `xmlns="http://www.w3.org/2000/svg">${shapes[shape]}</svg>`;
+}
+
+// 刺激をオフセット付きで包むラッパー
+function stimulusHTML(shape) {
+  return `<div class="stim-area" style="transform: translate(${CONFIG.STIM_OFFSET_X}px, ${CONFIG.STIM_OFFSET_Y}px);">` +
+         makeStimulusSVG(shape, CONFIG.STIM_SIZE) + `</div>`;
+}
+
+// 反応の割り当て（キーボード条件）
+const KEY_UP = "ArrowUp";
+const KEY_DOWN = "ArrowDown";
+
+/* =========================================================
+   初期化
+========================================================= */
+const jsPsych = initJsPsych({
+  on_finish: () => {
+    if (!CONFIG.DATAPIPE_EXPERIMENT_ID) {
+      jsPsych.data.get().localSave("csv", "data_" + participant_id + ".csv");
+    }
+  }
+});
+
+/* --- 表示環境メタデータの記録（全行に付与される） ---
+   screen_*   : ディスプレイ全体の解像度（CSSピクセル）
+   viewport_* : 実験開始時のブラウザ表示領域
+   device_pixel_ratio : 物理ピクセル/CSSピクセル比（Retina等で>1）      */
+jsPsych.data.addProperties({
+  screen_width: screen.width,
+  screen_height: screen.height,
+  viewport_width_initial: window.innerWidth,
+  viewport_height_initial: window.innerHeight,
+  device_pixel_ratio: window.devicePixelRatio,
+  user_agent: navigator.userAgent
+});
+
+// 参加者ID：URLパラメータ ?id=XXX があればそれを初期値に，無ければランダム生成
+let participant_id =
+  jsPsych.data.getURLVariable("id") || jsPsych.randomization.randomID(8);
+
+// 入力方法（自動判定。フォームで参加者が変更可能）
+let use_keyboard = !(("ontouchstart" in window) || navigator.maxTouchPoints > 0);
+
+// タッチUIの配置。利き手の回答に基づき決定（右利き→右下，左利き→左下）
+let button_position = "right";
+
+/* =========================================================
+   タイムライン構築
+========================================================= */
+const timeline = [];
+
+/* --- 最初の画面：参加者ID・デモグラフィック・回答方法 --- */
+timeline.push({
+  type: jsPsychSurveyHtmlForm,
+  preamble: "<h2>実験を始める前に</h2><p>以下の項目に入力してください。</p>",
+  button_label: "次へ",
+  html: () => `
+  <div id="entry-form">
+    <fieldset>
+      <legend>参加者ID</legend>
+      <input type="text" name="pid" value="${participant_id}" required>
+      <p class="note">実験者から指定がある場合は入力・修正してください。</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>年齢</legend>
+      <input type="number" name="age" min="0" max="120" style="width:100px;" required> 歳
+    </fieldset>
+
+    <fieldset>
+      <legend>性別</legend>
+      <label><input type="radio" name="gender" value="male" required> 男性</label>
+      <label><input type="radio" name="gender" value="female"> 女性</label><br>
+      <label><input type="radio" name="gender" value="other"> その他：
+        <input type="text" name="gender_other" style="width:140px;"></label><br>
+      <label><input type="radio" name="gender" value="no_answer"> 回答しない</label>
+    </fieldset>
+
+    <fieldset>
+      <legend>利き手</legend>
+      <label><input type="radio" name="handedness" value="right" required> 右利き</label>
+      <label><input type="radio" name="handedness" value="left"> 左利き</label>
+    </fieldset>
+
+    <fieldset>
+      <legend>回答方法</legend>
+      <label><input type="radio" name="input_method" value="keyboard" ${use_keyboard ? "checked" : ""}>
+        キーボード（矢印キー）で回答する</label><br>
+      <label><input type="radio" name="input_method" value="button" ${!use_keyboard ? "checked" : ""}>
+        画面のボタンで回答する</label>
+      <p class="note">自動判定の結果が選択されています。この端末の状況に合わせて変更できます。</p>
+    </fieldset>
+  </div>`,
+  on_finish: (data) => {
+    const f = data.response;
+    participant_id = (f.pid || "").trim() || jsPsych.randomization.randomID(8);
+    use_keyboard = (f.input_method === "keyboard");
+    button_position = (f.handedness === "left") ? "left" : "right";
+    jsPsych.data.addProperties({
+      participant_id: participant_id,
+      age: f.age,
+      gender: f.gender,
+      gender_detail: f.gender === "other" ? (f.gender_other || "") : "",
+      handedness: f.handedness,
+      input_mode: use_keyboard ? "keyboard" : "button",
+      button_position: button_position
+    });
+  }
+});
+
+/* --- フルスクリーン化（デモグラフィック入力後・教示の前） --- */
+timeline.push({
+  type: jsPsychFullscreen,
+  fullscreen_mode: true,
+  message: `<p>ここからは<strong>全画面表示</strong>で実験を行います。</p>
+            <p>下のボタンを押すと全画面に切り替わり，続いて説明が表示されます。</p>
+            <p class="note">※実験が終了するまで，全画面表示を解除したり<br>
+            他のアプリ・タブに切り替えたりしないでください。</p>`,
+  button_label: "全画面にして説明へ進む",
+  delay_after: 300,
+  on_finish: () => {
+    // 全画面化後の実際の提示領域を記録（刺激サイズの事後推定に使用）
+    jsPsych.data.addProperties({
+      viewport_width_fullscreen: window.innerWidth,
+      viewport_height_fullscreen: window.innerHeight
+    });
+  }
+});
+
+/* --- 教示（複数ページ） --- */
+timeline.push({
+  type: jsPsychInstructions,
+  pages: () => {
+    const common1 = `
+      <h2>実験の説明</h2>
+      <p>この実験では，画面に図形（円または四角）が1つずつ表示されます。</p>
+      <p>各図形の前には「＋」マーク（注視点）が表示されます。<br>
+      「＋」が出ている間は画面中央を見つめていてください。</p>`;
+    const mapping_kb = `
+      <h2>回答方法</h2>
+      <p>図形が<strong>円</strong>のときは <strong>上矢印キー（↑）</strong>を，<br>
+      図形が<strong>四角</strong>のときは <strong>下矢印キー（↓）</strong>を押してください。</p>
+      <p>できるだけ<strong>速く，正確に</strong>回答してください。</p>`;
+    const mapping_btn = `
+      <h2>回答方法</h2>
+      <p>画面の${button_position === "right" ? "右下" : "左下"}に，
+      矢印キーの形をしたボタンが表示されます。</p>
+      <p>回答に使うのは<strong>上向き（↑）と下向き（↓）のボタンのみ</strong>です。<br>
+      左右のボタンはこの実験では使用しません。</p>
+      <p>図形が<strong>円</strong>のときは <strong>↑ボタン</strong>を，<br>
+      図形が<strong>四角</strong>のときは <strong>↓ボタン</strong>をタップしてください。</p>
+      <p>できるだけ<strong>速く，正確に</strong>回答してください。</p>`;
+    const common2 = `
+      <h2>練習について</h2>
+      <p>まず<strong>練習試行</strong>を行います。練習では回答のたびに正誤が表示されます。</p>
+      <p>練習のあと，本番の試行が ${CONFIG.N_BLOCKS} ブロックあります。<br>
+      ブロックの間には休憩をとることができます。</p>
+      <p>準備ができたら「次へ」を押して練習を始めてください。</p>`;
+    return [common1, use_keyboard ? mapping_kb : mapping_btn, common2];
+  },
+  show_clickable_nav: true,
+  button_label_previous: "戻る",
+  button_label_next: "次へ"
+});
+
+/* --- 試行の部品 --- */
+
+// 注視点：提示時間を FIXATION_MIN〜MAX の範囲でランダムに決定
+const fixation = {
+  type: jsPsychHtmlKeyboardResponse,
+  stimulus: '<div style="font-size:48px;">+</div>',
+  choices: "NO_KEYS",
+  trial_duration: () =>
+    jsPsych.randomization.randomInt(CONFIG.FIXATION_MIN, CONFIG.FIXATION_MAX),
+  data: { task: "fixation" }
+};
+
+// キーボード条件の反応試行（↑／↓）
+const trial_keyboard = {
+  type: jsPsychHtmlKeyboardResponse,
+  stimulus: () => stimulusHTML(jsPsych.evaluateTimelineVariable("shape")),
+  choices: [KEY_UP, KEY_DOWN],
+  data: {
+    task: "response",
+    shape: jsPsych.timelineVariable("shape"),
+    correct_response: jsPsych.timelineVariable("correct")
+  },
+  on_finish: (data) => {
+    data.chosen = jsPsych.pluginAPI.compareKeys(data.response, KEY_UP) ? "up" : "down";
+    data.correct = (data.chosen === data.correct_response);
+  }
+};
+
+// タッチ条件の反応試行（矢印キーパッドを利き手側の画面隅に配置）
+const trial_button = {
+  type: jsPsychHtmlButtonResponse,
+  stimulus: () => stimulusHTML(jsPsych.evaluateTimelineVariable("shape")),
+  choices: ["up", "down"],
+  button_html: (choice, i) =>
+    i === 0
+      ? '<button class="arrow-key-btn key-up">↑</button>'
+      : '<button class="arrow-key-btn key-down">↓</button>',
+  css_classes: () => ["arrow-trial", "pos-" + button_position],
+  on_load: () => {
+    // 装飾用の←→キーを追加（現在は反応に使用しないため無効化してある）
+    const grp = document.getElementById("jspsych-html-button-response-btngroup");
+    const mkDeco = (symbol, cls) => {
+      const b = document.createElement("button");
+      b.className = "arrow-key-btn decorative " + cls;
+      b.disabled = true;
+      b.tabIndex = -1;
+      b.textContent = symbol;
+      return b;
+    };
+    grp.appendChild(mkDeco("←", "key-left"));
+    grp.appendChild(mkDeco("→", "key-right"));
+  },
+  data: {
+    task: "response",
+    shape: jsPsych.timelineVariable("shape"),
+    correct_response: jsPsych.timelineVariable("correct")
+  },
+  on_finish: (data) => {
+    data.chosen = (data.response === 0) ? "up" : "down";
+    data.correct = (data.chosen === data.correct_response);
+  }
+};
+
+// 入力方法に応じてどちらかを実行する共通ユニット
+const response_unit = [
+  fixation,
+  { timeline: [trial_keyboard], conditional_function: () => use_keyboard },
+  { timeline: [trial_button],  conditional_function: () => !use_keyboard }
+];
+
+// 練習用フィードバック（直前の反応試行の正誤を表示）
+const feedback = {
+  type: jsPsychHtmlKeyboardResponse,
+  choices: "NO_KEYS",
+  trial_duration: CONFIG.FEEDBACK_DURATION,
+  stimulus: () => {
+    const last = jsPsych.data.get().filter({ task: "response" }).last(1).values()[0];
+    return last.correct
+      ? '<p style="font-size:36px; color:#2a7a2a;">正解</p>'
+      : '<p style="font-size:36px; color:#b03030;">不正解</p>';
+  },
+  data: { task: "feedback" }
+};
+
+/* --- 練習ブロック --- */
+timeline.push({
+  timeline: [...response_unit, feedback],
+  timeline_variables: STIMULI,
+  sample: { type: "fixed-repetitions", size: CONFIG.PRACTICE_REPEATS },
+  data: { phase: "practice" }
+});
+
+// 練習終了 → 本番開始の画面
+timeline.push({
+  type: jsPsychHtmlButtonResponse,
+  stimulus: `<p>練習は以上です。ここからが本番です。</p>
+             <p>本番では正誤のフィードバックは表示されません。</p>
+             <p>準備ができたらボタンを押して開始してください。</p>`,
+  choices: ["本番を開始する"]
+});
+
+/* --- 本試行：ブロック分け＋ブロック間の休憩 --- */
+for (let b = 1; b <= CONFIG.N_BLOCKS; b++) {
+  timeline.push({
+    timeline: response_unit,
+    timeline_variables: STIMULI,
+    sample: { type: "fixed-repetitions", size: CONFIG.REPEATS_PER_BLOCK },
+    data: { phase: "main", block: b }
+  });
+
+  if (b < CONFIG.N_BLOCKS) {
+    timeline.push({
+      type: jsPsychHtmlButtonResponse,
+      stimulus: `<h2>休憩</h2>
+                 <p>ブロック ${b} / ${CONFIG.N_BLOCKS} が終了しました。</p>
+                 <p>必要なだけ休憩をとり，準備ができたらボタンを押して<br>
+                 次のブロックを開始してください。</p>`,
+      choices: ["次のブロックを開始する"],
+      data: { task: "rest" }
+    });
+  }
+}
+
+/* --- データ保存（DataPipe使用時のみ） --- */
+if (CONFIG.DATAPIPE_EXPERIMENT_ID) {
+  timeline.push({
+    type: jsPsychPipe,
+    action: "save",
+    experiment_id: CONFIG.DATAPIPE_EXPERIMENT_ID,
+    filename: () => `${participant_id}.csv`,
+    data_string: () => jsPsych.data.get().csv()
+  });
+}
+
+/* --- フルスクリーン解除 --- */
+timeline.push({
+  type: jsPsychFullscreen,
+  fullscreen_mode: false
+});
+
+/* --- 終了画面 --- */
+timeline.push({
+  type: jsPsychHtmlButtonResponse,
+  stimulus: "<p>実験は以上です。ご協力ありがとうございました。</p><p>この画面を閉じてください。</p>",
+  choices: ["終了"]
+});
+
+jsPsych.run(timeline);
+</script>
+</html>

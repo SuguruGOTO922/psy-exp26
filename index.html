@@ -32,7 +32,22 @@
     .note { color: #666; font-size: 14px; }
 
     /* ---- タッチ回答用の矢印キー風ボタン ----
-       逆T字配置（上段：↑，下段：← ↓ →）。反応に使うのは↑↓のみ。 */
+       現在は↑↓の2キーのみを縦に配置。
+       .arrow-trial が付与された試行でのみ画面隅に固定配置する */
+    .arrow-trial #jspsych-html-button-response-btngroup {
+      position: fixed;
+      bottom: 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      align-items: center;
+    }
+    .arrow-trial.pos-right #jspsych-html-button-response-btngroup { right: 32px; }
+    .arrow-trial.pos-left  #jspsych-html-button-response-btngroup { left: 32px; }
+
+    /* ←→キーを含む逆T字配置（上段：↑，下段：← ↓ →）に戻す場合は，
+       上の flex 指定ブロックを削除して以下を復元し，
+       あわせて trial_button の on_load 内のコメントも解除すること。
     .arrow-trial #jspsych-html-button-response-btngroup {
       position: fixed;
       bottom: 32px;
@@ -41,13 +56,23 @@
       grid-template-rows: repeat(2, 84px);
       gap: 10px;
     }
-    .arrow-trial.pos-right #jspsych-html-button-response-btngroup { right: 32px; }
-    .arrow-trial.pos-left  #jspsych-html-button-response-btngroup { left: 32px; }
-
     .key-up    { grid-column: 2; grid-row: 1; }
     .key-left  { grid-column: 1; grid-row: 2; }
     .key-down  { grid-column: 2; grid-row: 2; }
     .key-right { grid-column: 3; grid-row: 2; }
+    */
+
+    /* 教示画面で提示するボタンUI（実際の表示位置に固定表示。押せるが何も起こらない） */
+    .arrow-pad-demo {
+      position: fixed;
+      bottom: 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      align-items: center;
+    }
+    .arrow-pad-demo.pos-right { right: 32px; }
+    .arrow-pad-demo.pos-left  { left: 32px; }
 
     .arrow-key-btn {
       width: 84px;
@@ -406,9 +431,13 @@ timeline.push({
 
     const mapping_btn = rule_common + `
       <p style="max-width:640px; margin: 12px auto;">
-      回答には，画面の${button_position === "right" ? "右下" : "左下"}に表示される
-      矢印キーの形をしたボタンを使います（使うのは<strong>↑と↓のみ</strong>で，
-      左右のボタンは使用しません）。<br>
+      回答には，画面の${button_position === "right" ? "右下" : "左下"}に表示されている
+      ボタンを使います。</p>
+      <div class="arrow-pad-demo pos-${button_position}">
+        <button type="button" class="arrow-key-btn key-up">↑</button>
+        <button type="button" class="arrow-key-btn key-down">↓</button>
+      </div>
+      <p style="max-width:640px; margin: 12px auto;">
       <strong>上側</strong>を通る方がよいと判断したら <strong>↑ボタン</strong>を，<br>
       <strong>下側</strong>を通る方がよいと判断したら <strong>↓ボタン</strong>をタップしてください。</p>
       <p>判断がついたら，<strong>すみやかに</strong>回答してください。<br>
@@ -469,6 +498,8 @@ const trial_button = {
       : '<button class="arrow-key-btn key-down">↓</button>',
   css_classes: () => ["arrow-trial", "pos-" + button_position],
   on_load: () => {
+    /* ←→の装飾キー（反応には使わない）を表示する場合は，以下のコメントを解除し，
+       CSSの逆T字配置ブロックもあわせて復元すること。
     const grp = document.getElementById("jspsych-html-button-response-btngroup");
     const mkDeco = (symbol, cls) => {
       const b = document.createElement("button");
@@ -480,6 +511,7 @@ const trial_button = {
     };
     grp.appendChild(mkDeco("←", "key-left"));
     grp.appendChild(mkDeco("→", "key-right"));
+    */
   },
   data: trial_data,
   on_finish: (data) => {
@@ -582,7 +614,7 @@ for (let b = 1; b <= CONFIG.N_BLOCKS; b++) {
       type: jsPsychHtmlButtonResponse,
       stimulus: `<h2>休憩</h2>
                  <p>ブロック ${b} / ${CONFIG.N_BLOCKS} が終了しました。</p>
-                 <p>休憩をとってください。<br>
+                 <p>必要なだけ休憩をとってください。<br>
                  <strong>下のボタンを押すと，すぐに次のブロックが始まります。</strong></p>`,
       choices: ["次のブロックを開始する"],
       data: { task: "rest" }

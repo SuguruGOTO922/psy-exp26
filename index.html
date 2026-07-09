@@ -12,6 +12,7 @@
   <script src="https://unpkg.com/@jspsych/plugin-survey-html-form@2.1.0"></script>
   <script src="https://unpkg.com/@jspsych/plugin-instructions@2.1.0"></script>
   <script src="https://unpkg.com/@jspsych/plugin-fullscreen@2.1.0"></script>
+  <script src="https://unpkg.com/@jspsych/plugin-preload@2.1.0"></script>
   <script src="https://unpkg.com/@jspsych-contrib/plugin-pipe@0.6"></script>
   <link href="https://unpkg.com/jspsych@8.2.1/css/jspsych.css" rel="stylesheet">
 
@@ -89,6 +90,17 @@
       box-shadow: 0 4px 0 #555;
     }
     html.dark-mode .arrow-key-btn:active { box-shadow: 0 1px 0 #555; }
+
+    /* ---- 教示用の例示画像 ---- */
+    .inst-img {
+      display: block;
+      max-width: min(420px, 80vw);
+      height: auto;
+      margin: 16px auto;
+      border-radius: 8px;
+      background: #fff;      /* 黒背景でも見やすいよう白地に載せる */
+      padding: 8px;
+    }
   </style>
 </head>
 <body></body>
@@ -102,6 +114,11 @@ const CONFIG = {
 
   N_BLOCKS: 6,             // 本試行（156試行）を分割するブロック数（156/6 = 26試行/ブロック）
   PRACTICE_TRIALS: 10,     // 練習試行数（22点から重複を許してランダム選択）
+
+  // 教示画面に挿入する腕運動の例示画像。実験HTMLと同じ場所に置いたファイル名
+  // （またはサブフォルダ付きの相対パス，例 "img/arm_movement.png"）を指定する。
+  // 空文字 "" にすると画像なしで教示文のみ表示される。
+  INSTRUCTION_IMAGE: "arm_movement.png",
 
   FIXATION_MIN: 400,       // 注視点提示時間の下限（ms）
   FIXATION_MAX: 900,       // 注視点提示時間の上限（ms）
@@ -247,6 +264,17 @@ function makePracticeTrialList() {
 ========================================================= */
 const timeline = [];
 
+/* --- 画像の事前読み込み（教示画像が指定されている場合のみ） --- */
+if (CONFIG.INSTRUCTION_IMAGE) {
+  timeline.push({
+    type: jsPsychPreload,
+    images: [CONFIG.INSTRUCTION_IMAGE],
+    show_progress_bar: false,
+    error_message: "画像の読み込みに失敗しました。ページを再読み込みしてください。",
+    on_error: () => console.warn("教示画像が読み込めません: " + CONFIG.INSTRUCTION_IMAGE)
+  });
+}
+
 /* --- 最初の画面：参加者ID・デモグラフィック・回答方法 --- */
 timeline.push({
   type: jsPsychSurveyHtmlForm,
@@ -340,7 +368,7 @@ timeline.push({
       ${example}
       <p style="max-width:640px; margin: 12px auto;">
       左の<strong style="color:${CONFIG.SCENE.COLOR_START};">灰色の円</strong>が<strong>スタート地点</strong>，
-      右の<strong style="color:${CONFIG.SCENE.COLOR_GOAL};">水色の円</strong>が<strong>ゴール地点</strong>，<br>
+      右の<strong style="color:${CONFIG.SCENE.COLOR_GOAL};">水色の円</strong>が<strong>ゴール地点</strong>，
       中央付近の<strong style="color:${CONFIG.SCENE.COLOR_OBSTACLE};">赤色の円</strong>が<strong>障害物</strong>です。<br>
       障害物の位置は試行ごとに変わります。</p>`;
 
@@ -350,6 +378,10 @@ timeline.push({
       スタートからゴールまで，<strong>自分の腕（上肢）を動かして，手をゴールまで
       到達させる場面を想像してください</strong>。<br>
       （実際に腕を動かす必要はありません）</p>
+      ${CONFIG.INSTRUCTION_IMAGE
+        ? `<img class="inst-img" src="${CONFIG.INSTRUCTION_IMAGE}"
+              alt="スタートからゴールまで腕を伸ばして到達する運動の例">`
+        : ""}
       <p style="max-width:640px; margin: 12px auto;">
       その運動を行うとしたら，赤い障害物の<strong>上側</strong>と<strong>下側</strong>の
       どちらを通って回避する方が，<strong>できるだけ速く・正確に</strong>ゴールに
@@ -509,7 +541,7 @@ timeline.push({
   type: jsPsychHtmlButtonResponse,
   stimulus: `<p>練習は以上です。ここからが本番です。</p>
              <p>やり方は練習と同じです。<br>
-             障害物の<strong>上側／下側</strong>のどちらを通る方が速くかつ正確に
+             障害物の<strong>上側／下側</strong>のどちらを通る方が速く正確に
              到達できそうかを判断して回答してください。</p>
              <p><strong>下のボタンを押すと，すぐに本番が始まります。</strong><br>
              準備ができたらボタンを押してください。</p>`,

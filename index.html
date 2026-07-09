@@ -94,12 +94,9 @@
     /* ---- 教示用の例示画像 ---- */
     .inst-img {
       display: block;
-      max-width: min(420px, 80vw);
+      max-width: min(630px, 85vw);
       height: auto;
       margin: 16px auto;
-      border-radius: 8px;
-      background: #fff;      /* 黒背景でも見やすいよう白地に載せる */
-      padding: 8px;
     }
   </style>
 </head>
@@ -110,7 +107,7 @@
 ========================================================= */
 const CONFIG = {
   // DataPipe（https://pipe.jspsych.org）の実験ID。空文字ならローカルCSV保存になる
-  DATAPIPE_EXPERIMENT_ID: "zUWWco1Owpur",
+  DATAPIPE_EXPERIMENT_ID: "zUWWco1Owpu",
 
   N_BLOCKS: 6,             // 本試行（156試行）を分割するブロック数（156/6 = 26試行/ブロック）
   PRACTICE_TRIALS: 10,     // 練習試行数（22点から重複を許してランダム選択）
@@ -355,67 +352,67 @@ timeline.push({
   }
 });
 
-/* --- 教示（複数ページ） --- */
+/* --- 教示（複数ページ）
+   1ページ目：腕運動の画像で想定する上肢運動を理解してもらう
+   2ページ目：刺激の配置例で各オブジェクトの意味を理解してもらう
+   3ページ目：配置例を再提示しながら反応ルールを理解してもらう          --- */
 timeline.push({
   type: jsPsychInstructions,
   pages: () => {
     // 教示用の例示場面（Near位置・やや上の障害物）
     const example = sceneSVG(CONFIG.SCENE.OBSTACLE_X_NEAR, 2 * CONFIG.SCENE.STEP_Y, 520);
+    const arm_image = CONFIG.INSTRUCTION_IMAGE
+      ? `<img class="inst-img" src="${CONFIG.INSTRUCTION_IMAGE}"
+            alt="スタートからゴールまで腕を伸ばして到達する運動の例">`
+      : "";
 
+    /* (1) 想定する上肢運動の理解 */
     const page1 = `
       <h2>課題の説明（1/3）</h2>
-      <p>この実験では，下の図のような画面が表示されます。</p>
+      <p style="max-width:640px; margin: 12px auto;">
+      この実験では，下の図のように，<strong>腕をまっすぐ前に伸ばした状態で，
+      手先をスタート地点からゴール地点まで到達させる運動</strong>を想像してもらいます。</p>
+      ${arm_image}
+      <p style="max-width:640px; margin: 12px auto;">
+      実験中に実際に腕を動かす必要はありません。</p>`;
+
+    /* (2) 刺激の配置と各オブジェクトの意味の理解 */
+    const page2 = `
+      <h2>課題の説明（2/3）</h2>
+      <p>実験中は，下の図のような画面が表示されます。</p>
       ${example}
       <p style="max-width:640px; margin: 12px auto;">
       左の<strong style="color:${CONFIG.SCENE.COLOR_START};">灰色の円</strong>が<strong>スタート地点</strong>，
       右の<strong style="color:${CONFIG.SCENE.COLOR_GOAL};">水色の円</strong>が<strong>ゴール地点</strong>，
-      中央付近の<strong style="color:${CONFIG.SCENE.COLOR_OBSTACLE};">赤色の円</strong>が<strong>障害物</strong>です。<br>
+      中央付近の<strong style="color:${CONFIG.SCENE.COLOR_OBSTACLE};">赤色の円</strong>が<strong>障害物</strong>です。</p>
+      <p style="max-width:640px; margin: 12px auto;">
       障害物の位置は試行ごとに変わります。</p>`;
 
-    const page2 = `
-      <h2>課題の説明（2/3）</h2>
+    /* (3) 反応ルールの理解（配置例を再提示しながら） */
+    const rule_common = `
+      <h2>課題の説明（3/3）</h2>
       <p style="max-width:640px; margin: 12px auto;">
-      スタートからゴールまで，<strong>自分の腕（上肢）を動かして，手をゴールまで
-      到達させる場面を想像してください</strong>。<br>
-      （実際に腕を動かす必要はありません）</p>
-      ${CONFIG.INSTRUCTION_IMAGE
-        ? `<img class="inst-img" src="${CONFIG.INSTRUCTION_IMAGE}"
-              alt="スタートからゴールまで腕を伸ばして到達する運動の例">`
-        : ""}
+      1ページ目の運動をこの画面で行うと想像したとき，赤い<strong>障害物の上側と下側の
+      どちらを通って回避する方が，できるだけ速く・正確に</strong>ゴールに到達できそうかを
+      判断してください。</p>
+      ${example}`;
+
+    const mapping_kb = rule_common + `
       <p style="max-width:640px; margin: 12px auto;">
-      その運動を行うとしたら，赤い障害物の<strong>上側</strong>と<strong>下側</strong>の
-      どちらを通って回避する方が，<strong>できるだけ速く・正確に</strong>ゴールに
-      到達できそうかを判断してください。</p>
-      <p style="max-width:640px; margin: 12px auto;">
+      <strong>上側</strong>を通る方がよいと判断したら <strong>上矢印キー（↑）</strong>を，<br>
+      <strong>下側</strong>を通る方がよいと判断したら <strong>下矢印キー（↓）</strong>を押してください。</p>
+      <p>判断がついたら，<strong>すみやかに</strong>回答してください。<br>
       この課題に決まった正解はありません。あなた自身の判断で回答してください。</p>`;
 
-    const mapping_kb = `
-      <h2>回答方法（3/3）</h2>
+    const mapping_btn = rule_common + `
       <p style="max-width:640px; margin: 12px auto;">
-      障害物の<strong>上側</strong>を通る方がよいと判断したら <strong>上矢印キー（↑）</strong>を，<br>
-      <strong>下側</strong>を通る方がよいと判断したら <strong>下矢印キー（↓）</strong>を押してください。</p>
-      <p>判断がついたら，<strong>すみやかに</strong>回答してください。</p>
-      <p style="max-width:640px; margin: 12px auto;">
-      まず練習を ${CONFIG.PRACTICE_TRIALS} 試行行い，そのあと本番（${CONFIG.N_BLOCKS} ブロック）に進みます。<br>
-      ブロックの間には休憩をとることができます。</p>
-      <p style="max-width:640px; margin: 12px auto;">
-      「次へ」を押すと，練習開始前の確認画面に進みます（まだ練習は始まりません）。</p>`;
-
-    const mapping_btn = `
-      <h2>回答方法（3/3）</h2>
-      <p style="max-width:640px; margin: 12px auto;">
-      画面の${button_position === "right" ? "右下" : "左下"}に，矢印キーの形をした
-      ボタンが表示されます。回答に使うのは<strong>↑と↓のみ</strong>です
-      （左右のボタンは使用しません）。</p>
-      <p style="max-width:640px; margin: 12px auto;">
-      障害物の<strong>上側</strong>を通る方がよいと判断したら <strong>↑ボタン</strong>を，<br>
+      回答には，画面の${button_position === "right" ? "右下" : "左下"}に表示される
+      矢印キーの形をしたボタンを使います（使うのは<strong>↑と↓のみ</strong>で，
+      左右のボタンは使用しません）。<br>
+      <strong>上側</strong>を通る方がよいと判断したら <strong>↑ボタン</strong>を，<br>
       <strong>下側</strong>を通る方がよいと判断したら <strong>↓ボタン</strong>をタップしてください。</p>
-      <p>判断がついたら，<strong>すみやかに</strong>回答してください。</p>
-      <p style="max-width:640px; margin: 12px auto;">
-      まず練習を ${CONFIG.PRACTICE_TRIALS} 試行行い，そのあと本番（${CONFIG.N_BLOCKS} ブロック）に進みます。<br>
-      ブロックの間には休憩をとることができます。</p>
-      <p style="max-width:640px; margin: 12px auto;">
-      「次へ」を押すと，練習開始前の確認画面に進みます（まだ練習は始まりません）。</p>`;
+      <p>判断がついたら，<strong>すみやかに</strong>回答してください。<br>
+      この課題に決まった正解はありません。あなた自身の判断で回答してください。</p>`;
 
     return [page1, page2, use_keyboard ? mapping_kb : mapping_btn];
   },
@@ -516,12 +513,17 @@ const response_unit = [
   isi
 ];
 
-/* --- 練習開始の確認画面 --- */
+/* --- 練習開始の確認画面（練習→本番の流れとブロック構成もここで説明する） --- */
 timeline.push({
   type: jsPsychHtmlButtonResponse,
   stimulus: () => `
     <h2>練習の開始</h2>
-    <p>これから練習を ${CONFIG.PRACTICE_TRIALS} 試行行います。</p>
+    <p style="max-width:640px; margin: 12px auto;">
+    これから練習を ${CONFIG.PRACTICE_TRIALS} 試行行います。<br>
+    練習のあと，本番（${CONFIG.N_BLOCKS} ブロック，各 ${Math.ceil(
+      2 * (CONFIG.SCENE.MAIN_LEVELS.length * CONFIG.SCENE.MAIN_REPS +
+           CONFIG.SCENE.DUMMY_LEVELS.length * CONFIG.SCENE.DUMMY_REPS) / CONFIG.N_BLOCKS)} 試行）に進みます。<br>
+    ブロックの間には休憩をとることができます。</p>
     <p><strong>下のボタンを押すと，すぐに練習が始まります。</strong><br>
     ボタンを押すと画面中央に「＋」が表示され，続いて課題画面が提示されます。</p>
     <p>${use_keyboard
@@ -580,7 +582,7 @@ for (let b = 1; b <= CONFIG.N_BLOCKS; b++) {
       type: jsPsychHtmlButtonResponse,
       stimulus: `<h2>休憩</h2>
                  <p>ブロック ${b} / ${CONFIG.N_BLOCKS} が終了しました。</p>
-                 <p>必要なだけ休憩をとってください。<br>
+                 <p>休憩をとってください。<br>
                  <strong>下のボタンを押すと，すぐに次のブロックが始まります。</strong></p>`,
       choices: ["次のブロックを開始する"],
       data: { task: "rest" }
@@ -616,6 +618,60 @@ timeline.push({
   choices: ["終了"]
 });
 
-jsPsych.run(timeline);
+/* =========================================================
+   実験者用：DataPipe転送テスト
+   URLに ?pipetest=1 を付けてアクセスすると，実験は開始せず，
+   小さなテストCSVをDataPipeに送信して結果を画面に表示する。
+   （例：https://～/index.html?pipetest=1）
+   参加者に配布するURLには付けないこと。
+========================================================= */
+async function runPipeTest() {
+  const box = document.createElement("div");
+  box.style.cssText = "max-width:640px; margin:80px auto; font-size:18px; line-height:1.8;";
+  document.body.appendChild(box);
+
+  if (!CONFIG.DATAPIPE_EXPERIMENT_ID) {
+    box.innerHTML = "<h2>DataPipe転送テスト</h2>" +
+      "<p>CONFIG.DATAPIPE_EXPERIMENT_ID が空です。実験IDを設定してから再実行してください。</p>";
+    return;
+  }
+
+  const filename = "pipetest_" +
+    new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14) + ".csv";
+  box.innerHTML = `<h2>DataPipe転送テスト</h2>
+    <p>実験ID: <code>${CONFIG.DATAPIPE_EXPERIMENT_ID}</code><br>
+    送信ファイル名: <code>${filename}</code></p><p>送信中…</p>`;
+
+  try {
+    // jsPsychPipeプラグインが内部で使うAPIと同じエンドポイントに直接POSTする
+    const res = await fetch("https://pipe.jspsych.org/api/data/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "*/*" },
+      body: JSON.stringify({
+        experimentID: CONFIG.DATAPIPE_EXPERIMENT_ID,
+        filename: filename,
+        data: "test,timestamp\n1," + new Date().toISOString() + "\n"
+      })
+    });
+    const text = await res.text();
+    box.innerHTML += res.ok
+      ? `<p style="color:#2a7a2a;"><strong>送信成功（HTTP ${res.status}）</strong></p>
+         <p>OSFプロジェクトのデータコンポーネントに <code>${filename}</code> が
+         届いているか確認してください。</p>`
+      : `<p style="color:#b03030;"><strong>送信失敗（HTTP ${res.status}）</strong></p>
+         <p>サーバー応答: <code>${text}</code></p>
+         <p>実験IDの誤り，DataPipe側の「Enable data collection」がOFF，
+         OSFトークンの期限切れ，などが典型的な原因です。</p>`;
+  } catch (err) {
+    box.innerHTML += `<p style="color:#b03030;"><strong>送信エラー:</strong> ${err.message}</p>
+      <p>ネットワーク接続を確認してください。</p>`;
+  }
+}
+
+if (jsPsych.data.getURLVariable("pipetest")) {
+  runPipeTest();
+} else {
+  jsPsych.run(timeline);
+}
 </script>
 </html>

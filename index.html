@@ -386,7 +386,8 @@ timeline.push({
       その運動を行うとしたら，赤い障害物の<strong>上側</strong>と<strong>下側</strong>の
       どちらを通って回避する方が，<strong>できるだけ速く・正確に</strong>ゴールに
       到達できそうかを判断してください。</p>
-      <p>この課題に決まった正解はありません。あなた自身の判断で回答してください。</p>`;
+      <p style="max-width:640px; margin: 12px auto;">
+      この課題に決まった正解はありません。あなた自身の判断で回答してください。</p>`;
 
     const mapping_kb = `
       <h2>回答方法（3/3）</h2>
@@ -397,7 +398,8 @@ timeline.push({
       <p style="max-width:640px; margin: 12px auto;">
       まず練習を ${CONFIG.PRACTICE_TRIALS} 試行行い，そのあと本番（${CONFIG.N_BLOCKS} ブロック）に進みます。<br>
       ブロックの間には休憩をとることができます。</p>
-      <p class="note">「次へ」を押すと，練習開始前の確認画面に進みます（まだ練習は始まりません）。</p>`;
+      <p style="max-width:640px; margin: 12px auto;">
+      「次へ」を押すと，練習開始前の確認画面に進みます（まだ練習は始まりません）。</p>`;
 
     const mapping_btn = `
       <h2>回答方法（3/3）</h2>
@@ -412,7 +414,8 @@ timeline.push({
       <p style="max-width:640px; margin: 12px auto;">
       まず練習を ${CONFIG.PRACTICE_TRIALS} 試行行い，そのあと本番（${CONFIG.N_BLOCKS} ブロック）に進みます。<br>
       ブロックの間には休憩をとることができます。</p>
-      <p class="note">「次へ」を押すと，練習開始前の確認画面に進みます（まだ練習は始まりません）。</p>`;
+      <p style="max-width:640px; margin: 12px auto;">
+      「次へ」を押すと，練習開始前の確認画面に進みます（まだ練習は始まりません）。</p>`;
 
     return [page1, page2, use_keyboard ? mapping_kb : mapping_btn];
   },
@@ -536,15 +539,22 @@ timeline.push({
   data: { phase: "practice" }
 });
 
-// 練習終了 → 本番開始の画面
+// 練習終了 → 本番開始の画面（腕運動のイメージを再提示する）
 timeline.push({
   type: jsPsychHtmlButtonResponse,
-  stimulus: `<p>練習は以上です。ここからが本番です。</p>
-             <p>やり方は練習と同じです。<br>
-             障害物の<strong>上側／下側</strong>のどちらを通る方が速く正確に
-             到達できそうかを判断して回答してください。</p>
-             <p><strong>下のボタンを押すと，すぐに本番が始まります。</strong><br>
-             準備ができたらボタンを押してください。</p>`,
+  stimulus: () => `
+    <p>練習は以上です。ここからが本番です。</p>
+    <p style="max-width:640px; margin: 12px auto;">
+    やり方は練習と同じです。下の図のように，スタートからゴールまで
+    <strong>自分の腕を動かして到達させる場面</strong>を想像し，<br>
+    障害物の<strong>上側／下側</strong>のどちらを通る方が速く正確に
+    到達できそうかを判断して回答してください。</p>
+    ${CONFIG.INSTRUCTION_IMAGE
+      ? `<img class="inst-img" src="${CONFIG.INSTRUCTION_IMAGE}"
+            alt="スタートからゴールまで腕を伸ばして到達する運動の例">`
+      : ""}
+    <p><strong>下のボタンを押すと，すぐに本番が始まります。</strong><br>
+    準備ができたらボタンを押してください。</p>`,
   choices: ["本番を開始する"]
 });
 
@@ -570,7 +580,7 @@ for (let b = 1; b <= CONFIG.N_BLOCKS; b++) {
       type: jsPsychHtmlButtonResponse,
       stimulus: `<h2>休憩</h2>
                  <p>ブロック ${b} / ${CONFIG.N_BLOCKS} が終了しました。</p>
-                 <p>休憩をとってください。<br>
+                 <p>必要なだけ休憩をとってください。<br>
                  <strong>下のボタンを押すと，すぐに次のブロックが始まります。</strong></p>`,
       choices: ["次のブロックを開始する"],
       data: { task: "rest" }

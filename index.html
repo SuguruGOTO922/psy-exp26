@@ -13,7 +13,6 @@
   <script src="https://unpkg.com/@jspsych/plugin-instructions@2.1.0"></script>
   <script src="https://unpkg.com/@jspsych/plugin-fullscreen@2.1.0"></script>
   <script src="https://unpkg.com/@jspsych/plugin-preload@2.1.0"></script>
-  <script src="https://unpkg.com/@jspsych-contrib/plugin-pipe@0.6"></script>
   <link href="https://unpkg.com/jspsych@8.2.1/css/jspsych.css" rel="stylesheet">
 
   <style>
@@ -243,6 +242,25 @@ let use_keyboard = !(("ontouchstart" in window) || navigator.maxTouchPoints > 0)
 // タッチUIの配置（右利き→右下，左利き→左下）
 let button_position = "right";
 
+/* --- DataPipe送信の共通関数（成功でtrue，失敗でfalseを返す） --- */
+async function sendToDataPipe(filename, dataString) {
+  try {
+    const res = await fetch("https://pipe.jspsych.org/api/data/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "*/*" },
+      body: JSON.stringify({
+        experimentID: CONFIG.DATAPIPE_EXPERIMENT_ID,
+        filename: filename,
+        data: dataString
+      })
+    });
+    return res.ok;
+  } catch (e) {
+    console.warn("DataPipe送信エラー: " + e.message);
+    return false;
+  }
+}
+
 /* =========================================================
    試行リストの生成
 ========================================================= */
@@ -324,27 +342,48 @@ timeline.push({
   on_finish: (data) => {
     participant_id = (data.response.pid || "").trim() || jsPsych.randomization.randomID(8);
     jsPsych.data.addProperties({ participant_id: participant_id });
-
-    // 参加者IDのみの小さなCSVをDataPipeへ送信する（参加人数の把握用）。
-    // 実験の進行は止めない（バックグラウンド送信，失敗してもコンソール警告のみ）。
-    if (CONFIG.DATAPIPE_EXPERIMENT_ID) {
-      const ts = new Date().toISOString();
-      const fname = "entry_" + participant_id + "_" +
-        ts.replace(/[-:T]/g, "").slice(0, 14) + ".csv";
-      fetch("https://pipe.jspsych.org/api/data/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Accept": "*/*" },
-        body: JSON.stringify({
-          experimentID: CONFIG.DATAPIPE_EXPERIMENT_ID,
-          filename: fname,
-          data: "participant_id,entry_time\n" + participant_id + "," + ts + "\n"
-        })
-      }).then((r) => {
-        if (!r.ok) console.warn("エントリー登録の送信に失敗しました: HTTP " + r.status);
-      }).catch((e) => console.warn("エントリー登録の送信エラー: " + e.message));
-    }
   }
 });
+
+/* --- エントリー登録：参加者IDのみのCSVをDataPipeに送信（参加人数の把握用）。
+       送信が成功するまで次の画面には進まない。失敗時は再試行画面を表示する。 --- */
+if (CONFIG.DATAPIPE_EXPERIMENT_ID) {
+  let entry_sent = false;
+  let entry_attempt = 0;
+
+  const entry_send = {
+    type: jsPsychHtmlKeyboardResponse,
+    stimulus: "<p>参加者IDを送信しています…</p>",
+    choices: "NO_KEYS",
+    data: { task: "entry_send" },
+    on_load: async () => {
+      entry_attempt++;
+      const ts = new Date().toISOString();
+      const fname = "entry_" + participant_id + "_" +
+        ts.replace(/[-:T]/g, "").slice(0, 14) +
+        (entry_attempt > 1 ? "_r" + entry_attempt : "") + ".csv";
+      entry_sent = await sendToDataPipe(
+        fname, "participant_id,entry_time\n" + participant_id + "," + ts + "\n");
+      jsPsych.finishTrial({ success: entry_sent });
+    }
+  };
+
+  const entry_retry = {
+    timeline: [{
+      type: jsPsychHtmlButtonResponse,
+      stimulus: `<p>参加者IDの送信に失敗しました。</p>
+                 <p>通信環境をご確認のうえ，下のボタンを押して再試行してください。</p>`,
+      choices: ["再試行する"],
+      data: { task: "entry_retry" }
+    }],
+    conditional_function: () => !entry_sent
+  };
+
+  timeline.push({
+    timeline: [entry_send, entry_retry],
+    loop_function: () => !entry_sent
+  });
+}
 
 /* --- デモグラフィックデータ・回答方法の入力画面 --- */
 timeline.push({
@@ -688,15 +727,45 @@ timeline.push({
   }
 });
 
-/* --- データ保存（DataPipe使用時，かつ送信に同意した場合のみ） --- */
+/* --- データ保存（DataPipe使用時，かつ送信に同意した場合のみ）。
+       送信が成功したことを確認してから終了画面に進む。失敗時は再試行画面を表示する。
+       再試行時はファイル名に _r2, _r3… を付け，サーバー側に届いていた場合の
+       ファイル名衝突による再試行不能を防ぐ。 --- */
 if (CONFIG.DATAPIPE_EXPERIMENT_ID) {
+  let save_success = false;
+  let save_attempt = 0;
+
+  const save_send = {
+    type: jsPsychHtmlKeyboardResponse,
+    stimulus: "<p>データを送信しています…<br>この画面を閉じずにお待ちください。</p>",
+    choices: "NO_KEYS",
+    data: { task: "data_send" },
+    on_load: async () => {
+      save_attempt++;
+      const fname = save_attempt === 1
+        ? participant_id + ".csv"
+        : participant_id + "_r" + save_attempt + ".csv";
+      save_success = await sendToDataPipe(fname, jsPsych.data.get().csv());
+      jsPsych.finishTrial({ success: save_success });
+    }
+  };
+
+  const save_retry = {
+    timeline: [{
+      type: jsPsychHtmlButtonResponse,
+      stimulus: `<p>データの送信に失敗しました。</p>
+                 <p>通信環境をご確認のうえ，下のボタンを押して再試行してください。<br>
+                 （この画面を閉じるとデータは送信されません）</p>`,
+      choices: ["再試行する"],
+      data: { task: "data_send_retry" }
+    }],
+    conditional_function: () => !save_success
+  };
+
   timeline.push({
     timeline: [{
-      type: jsPsychPipe,
-      action: "save",
-      experiment_id: CONFIG.DATAPIPE_EXPERIMENT_ID,
-      filename: () => `${participant_id}.csv`,
-      data_string: () => jsPsych.data.get().csv()
+      timeline: [save_send, save_retry],
+      loop_function: () => !save_success
     }],
     conditional_function: () => submit_consent
   });
@@ -744,7 +813,7 @@ async function runPipeTest() {
     送信ファイル名: <code>${filename}</code></p><p>送信中…</p>`;
 
   try {
-    // jsPsychPipeプラグインが内部で使うAPIと同じエンドポイントに直接POSTする
+    // 実験本体のデータ送信と同じDataPipeのAPIエンドポイントに直接POSTする
     const res = await fetch("https://pipe.jspsych.org/api/data/", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Accept": "*/*" },

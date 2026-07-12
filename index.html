@@ -137,6 +137,11 @@ const CONFIG = {
   N_BLOCKS: 6,             // 本試行（156試行）を分割するブロック数（156/6 = 26試行/ブロック）
   PRACTICE_TRIALS: 10,     // 練習試行数（22点から重複を許してランダム選択）
 
+  // 実施を許可する最小の画面サイズ（デバイス画面の短辺，CSSピクセル）。
+  // スマートフォン（短辺360〜430程度）を除外し，タブレット・PC（768以上）を通す値。
+  // 0 にするとチェックを無効化できる。
+  MIN_SCREEN_SHORT_SIDE: 0,
+
   // 教示画面に挿入する腕運動の例示画像。実験HTMLと同じ場所に置いたファイル名
   // （またはサブフォルダ付きの相対パス，例 "img/arm_movement.png"）を指定する。
   // 空文字 "" にすると画像なしで教示文のみ表示される。
@@ -206,9 +211,13 @@ function stimulusHTML(obs_x, obs_y) {
 /* =========================================================
    初期化
 ========================================================= */
+// 実験終了時のデータ送信への同意（終了前の確認画面で参加者が選択する）
+let submit_consent = true;
+
 const jsPsych = initJsPsych({
   on_finish: () => {
-    if (!CONFIG.DATAPIPE_EXPERIMENT_ID) {
+    // DataPipe未設定時のフォールバック（ローカルCSV保存）も送信同意がある場合のみ
+    if (!CONFIG.DATAPIPE_EXPERIMENT_ID && submit_consent) {
       jsPsych.data.get().localSave("csv", "data_" + participant_id + ".csv");
     }
   }
@@ -297,19 +306,53 @@ if (CONFIG.INSTRUCTION_IMAGE) {
   });
 }
 
-/* --- 最初の画面：参加者ID・デモグラフィック・回答方法 --- */
+/* --- 最初の画面：参加者IDの入力と送信（参加人数把握のためのエントリー登録） --- */
+timeline.push({
+  type: jsPsychSurveyHtmlForm,
+  preamble: "<h2>実験への参加</h2>",
+  button_label: "送信",
+  html: () => `
+  <div id="entry-form">
+    <fieldset>
+      <legend>参加者ID</legend>
+      <input type="text" name="pid" value="${participant_id}" required>
+      <p class="note">実験者から指定がある場合は入力・修正してください。<br>
+      「送信」を押すと，参加者IDが記録され，次の画面に進みます。</p>
+    </fieldset>
+  </div>`,
+  data: { task: "entry" },
+  on_finish: (data) => {
+    participant_id = (data.response.pid || "").trim() || jsPsych.randomization.randomID(8);
+    jsPsych.data.addProperties({ participant_id: participant_id });
+
+    // 参加者IDのみの小さなCSVをDataPipeへ送信する（参加人数の把握用）。
+    // 実験の進行は止めない（バックグラウンド送信，失敗してもコンソール警告のみ）。
+    if (CONFIG.DATAPIPE_EXPERIMENT_ID) {
+      const ts = new Date().toISOString();
+      const fname = "entry_" + participant_id + "_" +
+        ts.replace(/[-:T]/g, "").slice(0, 14) + ".csv";
+      fetch("https://pipe.jspsych.org/api/data/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "*/*" },
+        body: JSON.stringify({
+          experimentID: CONFIG.DATAPIPE_EXPERIMENT_ID,
+          filename: fname,
+          data: "participant_id,entry_time\n" + participant_id + "," + ts + "\n"
+        })
+      }).then((r) => {
+        if (!r.ok) console.warn("エントリー登録の送信に失敗しました: HTTP " + r.status);
+      }).catch((e) => console.warn("エントリー登録の送信エラー: " + e.message));
+    }
+  }
+});
+
+/* --- デモグラフィックデータ・回答方法の入力画面 --- */
 timeline.push({
   type: jsPsychSurveyHtmlForm,
   preamble: "<h2>実験を始める前に</h2><p>以下の項目に入力してください。</p>",
   button_label: "次へ",
   html: () => `
   <div id="entry-form">
-    <fieldset>
-      <legend>参加者ID</legend>
-      <input type="text" name="pid" value="${participant_id}" required>
-      <p class="note">実験者から指定がある場合は入力・修正してください。</p>
-    </fieldset>
-
     <fieldset>
       <legend>年齢</legend>
       <input type="number" name="age" min="0" max="120" style="width:100px;" required> 歳
@@ -342,11 +385,9 @@ timeline.push({
   </div>`,
   on_finish: (data) => {
     const f = data.response;
-    participant_id = (f.pid || "").trim() || jsPsych.randomization.randomID(8);
     use_keyboard = (f.input_method === "keyboard");
     button_position = (f.handedness === "left") ? "left" : "right";
     jsPsych.data.addProperties({
-      participant_id: participant_id,
       age: f.age,
       gender: f.gender,
       gender_detail: f.gender === "other" ? (f.gender_other || "") : "",
@@ -622,14 +663,42 @@ for (let b = 1; b <= CONFIG.N_BLOCKS; b++) {
   }
 }
 
-/* --- データ保存（DataPipe使用時のみ） --- */
+/* --- データ送信の確認画面（送信するが規定値。どちらを選んでも終了画面へ進む） --- */
+timeline.push({
+  type: jsPsychSurveyHtmlForm,
+  preamble: `
+    <h2>データ送信の確認</h2>
+    <p style="max-width:640px; margin: 12px auto;">
+    課題は以上です。最後に，この実験で記録されたデータの送信について確認します。</p>
+    <p style="max-width:640px; margin: 12px auto;">
+    データの提供は任意です。送信しないことを選んでも，不利益はありません。</p>`,
+  button_label: "決定して終了する",
+  html: `
+  <div id="entry-form">
+    <fieldset>
+      <legend>データの送信</legend>
+      <label><input type="radio" name="consent" value="yes" checked> データを送信する</label><br>
+      <label><input type="radio" name="consent" value="no"> データを送信しない</label>
+    </fieldset>
+  </div>`,
+  data: { task: "consent" },
+  on_finish: (data) => {
+    submit_consent = (data.response.consent === "yes");
+    jsPsych.data.addProperties({ data_submission_consent: submit_consent });
+  }
+});
+
+/* --- データ保存（DataPipe使用時，かつ送信に同意した場合のみ） --- */
 if (CONFIG.DATAPIPE_EXPERIMENT_ID) {
   timeline.push({
-    type: jsPsychPipe,
-    action: "save",
-    experiment_id: CONFIG.DATAPIPE_EXPERIMENT_ID,
-    filename: () => `${participant_id}.csv`,
-    data_string: () => jsPsych.data.get().csv()
+    timeline: [{
+      type: jsPsychPipe,
+      action: "save",
+      experiment_id: CONFIG.DATAPIPE_EXPERIMENT_ID,
+      filename: () => `${participant_id}.csv`,
+      data_string: () => jsPsych.data.get().csv()
+    }],
+    conditional_function: () => submit_consent
   });
 }
 
@@ -700,8 +769,24 @@ async function runPipeTest() {
   }
 }
 
+/* --- 画面サイズが小さすぎる端末（スマートフォン等）をブロックする --- */
+function showDeviceWarning() {
+  const box = document.createElement("div");
+  box.style.cssText =
+    "max-width:560px; margin:60px auto; padding:0 16px; font-size:17px; line-height:1.9;";
+  box.innerHTML = `
+    <h2>実施環境のお願い</h2>
+    <p>この実験は，<strong>パソコンまたはタブレット</strong>での実施を想定しています。</p>
+    <p>お使いの端末は画面が小さいため，課題を正しく表示できません。<br>
+    お手数ですが，パソコンまたはタブレットから，同じURLにアクセスし直してください。</p>`;
+  document.body.appendChild(box);
+}
+
 if (jsPsych.data.getURLVariable("pipetest")) {
   runPipeTest();
+} else if (CONFIG.MIN_SCREEN_SHORT_SIDE > 0 &&
+           Math.min(screen.width, screen.height) < CONFIG.MIN_SCREEN_SHORT_SIDE) {
+  showDeviceWarning();
 } else {
   jsPsych.run(timeline);
 }

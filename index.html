@@ -193,15 +193,12 @@ function sceneSVG(obs_x, obs_y, display_width) {
   const w = display_width || S.DISPLAY_WIDTH;
   // 内部座標系：中心原点。SVGはy正=下なので符号を反転する
   const toSvgY = (y) => -y;
-  // 左利きの場合はスタート・ゴールの左右を反転する（障害物の位置は変えない）
-  const start_x = (start_side === "left") ? S.START_X : -S.START_X;
-  const goal_x  = (start_side === "left") ? S.GOAL_X  : -S.GOAL_X;
   return `
   <svg class="scene-svg" style="width:min(${w}px, 92vw);"
        viewBox="${-S.VIEW_W / 2} ${-S.VIEW_H / 2} ${S.VIEW_W} ${S.VIEW_H}"
        xmlns="http://www.w3.org/2000/svg">
-    <circle cx="${start_x}" cy="0" r="${S.START_R}" fill="${S.COLOR_START}"/>
-    <circle cx="${goal_x}"  cy="0" r="${S.GOAL_R}"  fill="${S.COLOR_GOAL}"/>
+    <circle cx="${S.START_X}" cy="0" r="${S.START_R}" fill="${S.COLOR_START}"/>
+    <circle cx="${S.GOAL_X}"  cy="0" r="${S.GOAL_R}"  fill="${S.COLOR_GOAL}"/>
     <circle cx="${obs_x}" cy="${toSvgY(obs_y)}" r="${S.OBSTACLE_R}" fill="${S.COLOR_OBSTACLE}"/>
   </svg>`;
 }
@@ -244,9 +241,6 @@ let use_keyboard = !(("ontouchstart" in window) || navigator.maxTouchPoints > 0)
 
 // タッチUIの配置（右利き→右下，左利き→左下）
 let button_position = "right";
-
-// スタート・ゴールの左右配置（右利き・両利き：スタート左／ゴール右，左利き：スタート右／ゴール左）
-let start_side = "left";
 
 /* --- DataPipe送信の共通関数（成功でtrue，失敗でfalseを返す） --- */
 async function sendToDataPipe(filename, dataString) {
@@ -432,15 +426,13 @@ timeline.push({
     const f = data.response;
     use_keyboard = (f.input_method === "keyboard");
     button_position = (f.handedness === "left") ? "left" : "right";
-    start_side = (f.handedness === "left") ? "right" : "left";
     jsPsych.data.addProperties({
       age: f.age,
       gender: f.gender,
       gender_detail: f.gender === "other" ? (f.gender_other || "") : "",
       handedness: f.handedness,
       input_mode: use_keyboard ? "keyboard" : "button",
-      button_position: button_position,
-      start_side: start_side
+      button_position: button_position
     });
   }
 });
@@ -495,8 +487,8 @@ timeline.push({
       <p>実験中は，下の図のような画面が表示されます。</p>
       ${example}
       <p style="max-width:640px; margin: 12px auto;">
-      ${start_side === "left" ? "左" : "右"}の<strong style="color:${CONFIG.SCENE.COLOR_START};">灰色の円</strong>が<strong>スタート地点</strong>，
-      ${start_side === "left" ? "右" : "左"}の<strong style="color:${CONFIG.SCENE.COLOR_GOAL};">水色の円</strong>が<strong>ゴール地点</strong>，
+      左の<strong style="color:${CONFIG.SCENE.COLOR_START};">灰色の円</strong>が<strong>スタート地点</strong>，
+      右の<strong style="color:${CONFIG.SCENE.COLOR_GOAL};">水色の円</strong>が<strong>ゴール地点</strong>，
       中央付近の<strong style="color:${CONFIG.SCENE.COLOR_OBSTACLE};">赤色の円</strong>が<strong>障害物</strong>です。</p>
       <p style="max-width:640px; margin: 12px auto;">
       障害物の位置は試行ごとに変わります。</p>`;
